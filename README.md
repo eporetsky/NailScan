@@ -29,16 +29,16 @@ You do **not** need to install Rust on your machine separately: the conda enviro
 
 1. **Create and activate the conda environment**
 
-   ```bash
-conda env create -f environment.yml
-  conda activate nail
-   ```
+  ```bash
+  conda env create -f environment.yml
+  conda activate nailscan
+  ```
 
 2. **Install nail and the Pfam database**
 
-   ```bash
-   ./install.sh
-   ```
+  ```bash
+  ./install.sh
+  ```
 
    This builds nail and, using `config.json`, downloads the Pfam database from InterPro/EBI, verifies the MD5 checksum, and unpacks it into `data/pfam/`. If `data/pfam/pfam_a.hmm` already exists, the download is skipped.
 
