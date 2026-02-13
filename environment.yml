@@ -1,0 +1,10 @@
+# Conda environment for nail (pHMM alignment tool)
+# Install with: conda env create -f environment-nail.yml
+# Activate with: conda activate nail
+name: nailscan
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - rust      # to build nail from source
+  - mmseqs2   # required by nail search pipeline at runtime
