@@ -2,28 +2,20 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[NailScan](.) uses [nail](https://github.com/TravisWheelerLab/nail) (an Alignment Inference tooL) to run fast profile HMM search against HMM-based database such as the [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam/) database. Nail uses MMseqs2 for seeding and approximates the HMMER3 Forward/Backward algorithm for speed. NailScan is **not** meant to reproduce identical results to InterProScan or to replace it; it is intended as an alternative for HMM-based analyses where speed and scalability are priorities.
+NailScan uses [nail](https://github.com/TravisWheelerLab/nail) (an Alignment Inference tooL) to run fast profile HMM search against HMM-based database such as the [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam/) database. Nail uses MMseqs2 for seeding and approximates the HMMER3 Forward/Backward algorithm for speed. NailScan is **not** meant to reproduce identical results to InterProScan or to replace it; it is intended as an alternative for HMM-based analyses where speed and scalability are priorities.
 
-[![InterPro](https://img.shields.io/badge/InterPro–Pfam%20data-https%3A%2F%2Fwww.ebi.ac.uk%2Finterpro%2F-blue?labelColor=0a5f9e)](https://www.ebi.ac.uk/interpro/)
-[![nail](https://img.shields.io/badge/nail–search%20engine-https%3A%2F%2Fgithub.com%2FTravisWheelerLab%2Fnail-green?labelColor=2ea043)](https://github.com/TravisWheelerLab/nail)
+[![InterPro](https://img.shields.io/badge/InterPro–Pfam-https%3A%2F%2Fwww.ebi.ac.uk%2Finterpro%2F-blue?labelColor=0a5f9e)](https://www.ebi.ac.uk/interpro/)
+[![nail](https://img.shields.io/badge/nail-https%3A%2F%2Fgithub.com%2FTravisWheelerLab%2Fnail-green?labelColor=2ea043)](https://github.com/TravisWheelerLab/nail)
 
 > **Disclaimer:** NailScan is not affiliated with nail, InterPro, or Pfam. This project is independent of the nail developers, the InterPro/Pfam resource maintainers, and the EBI. NailScan is experimental and should be used with caution; results may need to be validated or filtered (e.g. by E‑value) depending on your use case.
 
 **References**
 
-- nail (search engine): [doi:10.1101/2024.01.27.577580](https://doi.org/10.1101/2024.01.27.577580) (bioRxiv).
-- Pfam: [doi:10.1093/nar/gkaa913](https://doi.org/10.1093/nar/gkaa913) (Nucleic Acids Res.).
-- InterPro: [doi:10.1093/nar/gkac993](https://doi.org/10.1093/nar/gkac993) (Nucleic Acids Res.).
+- nail (search engine): [doi:10.1101/2024.01.27.577580](https://doi.org/10.1101/2024.01.27.577580)
+- Pfam: [doi:10.1093/nar/gkaa913](https://doi.org/10.1093/nar/gkaa913)
+- InterPro: [doi:10.1093/nar/gkac993](https://doi.org/10.1093/nar/gkac993)
 
 ---
-
-## Requirements
-
-- **Conda** (Miniconda or Anaconda)
-- **Git** (to clone nail)
-- **Linux** (nail is tested on Linux; precompiled binaries are available for other platforms from the [nail releases](https://github.com/TravisWheelerLab/nail/releases) page if you prefer not to build)
-
-You do **not** need to install Rust on your machine separately: the conda environment provides Rust and Cargo for building nail from source.
 
 ## Quick start
 
@@ -128,14 +120,6 @@ Options: **`-f`** fasta file (single) or directory (batch), **`-o`** output file
 | `nailscan.single.sh` | Runs nail on one FASTA; writes one TSV (with optional ACC/DESC from Pfam map). |
 | `nailscan.batch.sh`  | Combines all `.fa`/`.faa`/`.fasta` in a directory, runs one nail search, splits results to gzipped TSVs in `results/pfam/`. |
 | `scripts/make_pfam_map.sh` | Parses a Pfam HMM and writes NAME, ACC, DESC map; used by the scan scripts when the map is missing. |
-
-## Optional: use a precompiled nail binary
-
-If you prefer not to build from source:
-
-1. Install MMseqs2 in conda: `conda create -n nail -c bioconda mmseqs2`
-2. Download the latest Linux binary from [nail releases](https://github.com/TravisWheelerLab/nail/releases) and put it in your PATH (e.g. `~/bin/nail` or `$CONDA_PREFIX/bin/nail`).
-3. Run `./nailscan.single.sh` / `./nailscan.batch.sh` as above. You can still use `install.sh` to fetch the Pfam database (or place the HMM in `data/pfam/` yourself).
 
 ## Contributors
 - **Elly Poretsky (@eporetsky)**
