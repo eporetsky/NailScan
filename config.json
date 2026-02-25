@@ -1,6 +1,52 @@
 {
   "pfam": {
     "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pfam/pfam-38.1.tar.gz",
-    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pfam/pfam-38.1.tar.gz.md5"
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pfam/pfam-38.1.tar.gz.md5",
+    "hmm_name": "pfam_a.hmm"
+  },
+  "ncbifam": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/ncbifam/ncbifam-18.0.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/ncbifam/ncbifam-18.0.tar.gz.md5",
+    "hmm_name": "ncbifam.hmm"
+  },
+  "superfamily": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/superfamily/superfamily-1.75.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/superfamily/superfamily-1.75.tar.gz.md5",
+    "hmm_name": "hmmlib_1.75"
+  },
+  "antifam": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/antifam/antifam-8.0.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/antifam/antifam-8.0.tar.gz.md5",
+    "hmm_name": "AntiFam.hmm"
+  },
+  "hamap": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/hamap/hamap-2025_01.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/hamap/hamap-2025_01.tar.gz.md5",
+    "hmm_name": "hamap.hmm.lib"
+  },
+  "sfld": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/sfld/sfld-4.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/sfld/sfld-4.tar.gz.md5",
+    "hmm_name": "sfld.hmm"
+  },
+  "pirsf": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsf/pirsf-3.10.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsf/pirsf-3.10.tar.gz.md5",
+    "hmm_name": "sf_hmm_all"
+  },
+  "pirsr": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsr/pirsr-2025_05.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsr/pirsr-2025_05.tar.gz.md5",
+    "hmm_name": "sr_hmm_all"
+  },
+  "panther": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/panther/panther-19.0.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/panther/panther-19.0.tar.gz.md5",
+    "hmm_name": "binHmm"
+  },
+  "cath": {
+    "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/cath/cath-4.3.0.tar.gz",
+    "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/cath/cath-4.3.0.tar.gz.md5",
+    "hmm_name": "gene3d_main.hmm"
   }
 }

@@ -1,10 +1,13 @@
-# Conda environment for nail (pHMM alignment tool)
-# Install with: conda env create -f environment-nail.yml
-# Activate with: conda activate nail
+# Conda environment for NailScan (nail + Python CLI)
+# Install: conda env create -f environment.yml && conda activate nailscan
+# Then run install.sh to build nail and download DBs.
 name: nailscan
 channels:
   - conda-forge
   - bioconda
 dependencies:
-  - rust      # to build nail from source
-  - mmseqs2   # required by nail search pipeline at runtime
+  - python
+  - rust      # to build nail from source (install.sh)
+  - mmseqs2   # required by nail at runtime
+  - hmmer     # for hmmconvert (Superfamily HMMER2 -> HMMER3 in install.sh)
+  - click     # Python CLI (or use uv run from repo: uv run nailscan ...)
