@@ -8,7 +8,7 @@ Usage:
   python3 scripts/benchmark.py --nailscan results/run_a.tsv --nailscan2 results/run_b.tsv
 
 NailScan TSV format (with Analysis column):
-  Analysis  target  NAME  ACC  DESC  target_start ...  evalue ...
+  Analysis  target  ACC  DESC  target_start ...  evalue ...
 
 InterProScan TSV format (no header):
   protein_id  md5  len  db  acc  desc  start  end  score  T/F  date  ipr_id  ipr_desc  go  pathway
@@ -56,6 +56,27 @@ _DB_ALIASES = {
     "Pfam": "Pfam",
 }
 
+# Databases not currently run by NailScan (or whose results are not yet reliable
+# enough to include in the benchmark). Commented out here so they are easy to
+# re-enable individually when support is added.
+_SKIP_DBS = {
+    # Not in NailScan config:
+    "CDD",
+    "PRINTS",
+    "SMART",
+    "ProSitePatterns",
+    "ProSiteProfiles",
+    # Gene3D sub-classification, not a separate NailScan analysis:
+    "FunFam",
+    # Excluded from default benchmark (comment out to re-enable):
+    "AntiFam",      # rarely annotates proteins; not a priority
+    "PIRSR",        # PIR Site Rules require residue-level detection algorithm
+    "Hamap",        # Prosite-matrix N_SCORE thresholds not transferable to HMM bit scores
+    "PIRSF",        # hierarchy-aware scoring not fully implemented; over-predicts parent families
+    "SFLD",         # requires per-residue active-site matching (sfld_postprocess); nail does not
+                    # produce HMMER alignment files needed for it; hierarchy filter caused recall ~0.4
+}
+
 
 def norm_db(db: str) -> str:
     return _DB_ALIASES.get(db, db)
@@ -79,11 +100,14 @@ def load_nailscan(path: str) -> dict:
     hits = defaultdict(set)
     with open(path) as f:
         reader = csv.DictReader(f, delimiter="\t")
-        # Accept both with and without the Analysis column
+        # Accept both with and without the Analysis column, and both old
+        # (NAME present) and new (NAME removed) output formats.
         has_analysis = "Analysis" in (reader.fieldnames or [])
         for row in reader:
             db_raw = row.get("Analysis", "unknown") if has_analysis else "unknown"
             db = norm_db(db_raw)
+            if db in _SKIP_DBS:
+                continue
             protein = row.get("target", "")
             acc_raw = row.get("ACC") or row.get("NAME") or ""
             acc = norm_acc(acc_raw, db)
@@ -116,7 +140,7 @@ def load_ipr(path: str) -> dict:
             acc = norm_acc(acc_raw, db)
             start = cols[6] if len(cols) > 6 else ""
             end = cols[7] if len(cols) > 7 else ""
-            if not protein or not acc or db in {"MobiDBLite", "Coils"}:
+            if not protein or not acc or db in {"MobiDBLite", "Coils"} | _SKIP_DBS:
                 continue
             hits[(protein, db, acc)].add((start, end))
     return hits
@@ -241,10 +265,12 @@ def main():
         ref = {k: v for k, v in ref.items() if k[1] in keep}
 
     stats = compute_stats(pred, ref)
-    ov = overall_stats(stats)
+    # Exclude skipped databases from overall stats
+    active_stats = {db: s for db, s in stats.items() if db not in _SKIP_DBS}
+    ov = overall_stats(active_stats)
 
     # Print table
-    col_w = 14
+    col_w = 18
     hdr = (f"{'Database':<{col_w}}  {'Pred':>6}  {'Ref':>6}  "
            f"{'TP':>6}  {'FP':>6}  {'FN':>6}  "
            f"{'Prec':>7}  {'Recall':>7}  {'F1':>7}")
@@ -252,7 +278,7 @@ def main():
     print()
     print(hdr)
     print(sep)
-    for db, s in sorted(stats.items()):
+    for db, s in sorted(active_stats.items()):
         print(f"{db:<{col_w}}  {s['pred_total']:>6}  {s['ref_total']:>6}  "
               f"{s['tp']:>6}  {s['fp']:>6}  {s['fn']:>6}  "
               f"{s['precision']:>7.3f}  {s['recall']:>7.3f}  {s['f1']:>7.3f}")

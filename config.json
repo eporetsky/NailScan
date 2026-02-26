@@ -22,22 +22,30 @@
   "hamap": {
     "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/hamap/hamap-2025_01.tar.gz",
     "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/hamap/hamap-2025_01.tar.gz.md5",
-    "hmm_name": "hamap.hmm.lib"
+    "hmm_name": "hamap.hmm.lib",
+    "enabled": false,
+    "disabled_reason": "Hamap uses Prosite-matrix normalized scores (N_SCORE) for thresholding, not HMM bit scores. Without per-profile cutoffs the HMM search produces too many false positives (~10x over-prediction vs InterProScan). Re-enable with --appl hamap."
   },
   "sfld": {
     "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/sfld/sfld-4.tar.gz",
     "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/sfld/sfld-4.tar.gz.md5",
-    "hmm_name": "sfld.hmm"
+    "hmm_name": "sfld.hmm",
+    "enabled": false,
+    "disabled_reason": "SFLD requires per-residue active-site matching on top of GA thresholds. InterProScan's sfld_postprocess binary reads HMMER Stockholm alignment output to verify that the protein has the required catalytic residues at specific alignment positions (defined in sfld_sites.annot). Nail does not produce HMMER-compatible alignment files, so this residue-level filter cannot be applied, causing ~20% over-prediction from proteins that pass GA thresholds but lack the correct catalytic residues. The hierarchy filter (SFLDS > SFLDG > SFLDF) was also found to be too aggressive, dropping recall to ~0.4. Re-enable with --appl sfld, but results will be unfiltered at the residue level."
   },
   "pirsf": {
     "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsf/pirsf-3.10.tar.gz",
     "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsf/pirsf-3.10.tar.gz.md5",
-    "hmm_name": "sf_hmm_all"
+    "hmm_name": "sf_hmm_all",
+    "enabled": false,
+    "disabled_reason": "InterProScan reports only the most specific family in the PIRSF hierarchy; without full hierarchy-aware scoring (length/coverage checks + parent-suppression) the HMM search over-predicts broad parent families (~4x false-positive rate). Re-enable with --appl pirsf."
   },
   "pirsr": {
     "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsr/pirsr-2025_05.tar.gz",
     "md5_url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/pirsr/pirsr-2025_05.tar.gz.md5",
-    "hmm_name": "sr_hmm_all"
+    "hmm_name": "sr_hmm_all",
+    "enabled": false,
+    "disabled_reason": "PIR Site Rules require residue-level functional site detection, not plain HMM search. Re-enable with --appl pirsr."
   },
   "panther": {
     "url": "https://ftp.ebi.ac.uk/pub/databases/interpro/iprscan/6/6.0/panther/panther-19.0.tar.gz",

@@ -8,7 +8,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NAIL_REPO_URL="${NAIL_REPO_URL:-https://github.com/TravisWheelerLab/nail}"
 NAIL_DIR="${NAIL_DIR:-${SCRIPT_DIR}/nail-repo}"
-NAIL_VERSION="${NAIL_VERSION:-main}"
+# Pinned to the commit the binarize patch was written against.
+# To upgrade nail: update this hash and regenerate patches/nail-binarize.patch.
+NAIL_VERSION="${NAIL_VERSION:-b6291d398d4af4dddc06fd8783b0b95990ca8e49}"
 DATA_ROOT="${SCRIPT_DIR}/data"
 CONFIG_JSON="${SCRIPT_DIR}/config.json"
 
@@ -33,6 +35,14 @@ if [[ -d "$NAIL_DIR" ]]; then
   (cd "$NAIL_DIR" && git fetch --all && git checkout "$NAIL_VERSION" && git pull --ff-only 2>/dev/null || true)
 else
   git clone --depth 1 --branch "$NAIL_VERSION" "$NAIL_REPO_URL" "$NAIL_DIR"
+fi
+
+PATCH_FILE="${SCRIPT_DIR}/patches/nail-binarize.patch"
+if [[ -f "$PATCH_FILE" ]]; then
+  echo "==> Applying nailscan patches ..."
+  (cd "$NAIL_DIR" && git apply "$PATCH_FILE")
+else
+  echo "Warning: patches/nail-binarize.patch not found; building unpatched nail (DB loading will be slower)"
 fi
 
 echo "==> Building nail (release) ..."
@@ -327,6 +337,35 @@ for k, v in c.items():
 ' "$CONFIG_JSON")
 fi
 
+# --- Pre-binarize HMM databases for fast loading ---
+# nail prep parses each HMM file and writes a <hmm>.nailbin bincode file that
+# nail search loads in ~2s instead of ~56s for large databases like Pfam.
+if [[ -f "$CONFIG_JSON" ]] && command -v nail &>/dev/null; then
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    dbname="${line%%	*}"
+    hmm_name="${line##*	}"
+    hmm_file="${DATA_ROOT}/${dbname}/${hmm_name}"
+    nailbin_file="${hmm_file}.nailbin"
+    if [[ ! -f "$hmm_file" ]]; then
+      continue
+    fi
+    if [[ -f "$nailbin_file" ]] && [[ "$nailbin_file" -nt "$hmm_file" ]]; then
+      echo "==> ${dbname}: binary DB already up to date (skipping prep)"
+      continue
+    fi
+    echo "==> Binarizing ${dbname} query database ..."
+    nail prep "$hmm_file"
+  done < <(python3 -c '
+import json, sys
+with open(sys.argv[1]) as f:
+    c = json.load(f)
+for k, v in c.items():
+    if isinstance(v, dict) and v.get("hmm_name"):
+        print(k, v["hmm_name"], sep="\t")
+' "$CONFIG_JSON")
+fi
+
 # --- PANTHER family names (for DESC column and post-processing) ---
 # Downloaded from data.pantherdb.org; used by scripts/add_ipr_go.py to add human-readable
 # family descriptions and to apply the best-hit filter that InterProScan uses.
@@ -409,4 +448,78 @@ NCBIFAM_HMM="${DATA_ROOT}/ncbifam/ncbifam.hmm"
 NCBIFAM_TC="${DATA_ROOT}/ncbifam/ncbifam.tc"
 if [[ -f "$NCBIFAM_HMM" ]]; then
   _build_thresholds "$NCBIFAM_HMM" "$NCBIFAM_TC" "TC"
+fi
+
+# --- SFLD GA threshold table ---
+SFLD_HMM="${DATA_ROOT}/sfld/sfld.hmm"
+SFLD_GA="${DATA_ROOT}/sfld/sfld.ga"
+if [[ -f "$SFLD_HMM" ]]; then
+  _build_thresholds "$SFLD_HMM" "$SFLD_GA" "GA"
+fi
+
+# --- PIRSF score threshold table (from pirsf.dat: avg - 3.5 * std_score) ---
+PIRSF_DAT="${DATA_ROOT}/pirsf/pirsf.dat"
+PIRSF_THRESH="${DATA_ROOT}/pirsf/pirsf.thresh"
+if [[ -f "$PIRSF_DAT" ]] && [[ ! -f "$PIRSF_THRESH" ]]; then
+  echo "==> Building PIRSF threshold table: $PIRSF_THRESH ..."
+  python3 - "$PIRSF_DAT" "$PIRSF_THRESH" <<'PYEOF'
+import sys
+dat_path, out_path = sys.argv[1], sys.argv[2]
+with open(dat_path) as f:
+    lines = [l.rstrip('\n') for l in f]
+with open(out_path, 'w') as out:
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith('>'):
+            pirsf_id = lines[i][1:].strip()
+            if i + 2 < len(lines):
+                nums = lines[i + 2].split()
+                if len(nums) >= 2:
+                    try:
+                        avg = float(nums[0])
+                        std = float(nums[1])
+                        threshold = max(0.0, avg - 3.5 * std)
+                        out.write(f'{pirsf_id}\t{threshold:.4f}\t{threshold:.4f}\n')
+                    except ValueError:
+                        pass
+            i += 4
+        else:
+            i += 1
+PYEOF
+  echo "==> Done: $PIRSF_THRESH ($(wc -l < "$PIRSF_THRESH") families)"
+elif [[ -f "$PIRSF_THRESH" ]]; then
+  echo "==> PIRSF threshold table already present"
+fi
+
+# --- InterPro entry name lookup table (IPR_ID -> short description) ---
+# Parsed from interpro.xml.gz (downloaded by scripts/download_interpro_mappings.sh).
+# Used by add_ipr_go.py to populate the IPR_desc output column.
+INTERPRO_XML="${DATA_ROOT}/interpro.xml.gz"
+INTERPRO_NAMES="${DATA_ROOT}/interpro_names.tsv"
+if [[ -f "$INTERPRO_XML" ]] && [[ ! -f "$INTERPRO_NAMES" ]]; then
+  echo "==> Building interpro_names.tsv from interpro.xml.gz ..."
+  python3 - "$INTERPRO_XML" "$INTERPRO_NAMES" <<'PYEOF'
+import sys, gzip, re
+xml_path, out_path = sys.argv[1], sys.argv[2]
+id_re = re.compile(r'<interpro\s+id="(IPR\d+)"')
+name_re = re.compile(r'<name>(.*?)</name>')
+opener = gzip.open if xml_path.endswith('.gz') else open
+with opener(xml_path, 'rt', encoding='utf-8') as f, open(out_path, 'w') as out:
+    current_id = None
+    for line in f:
+        if current_id is None:
+            m = id_re.search(line)
+            if m:
+                current_id = m.group(1)
+        else:
+            m = name_re.search(line)
+            if m:
+                out.write(f'{current_id}\t{m.group(1)}\n')
+                current_id = None
+            elif '<interpro ' in line:
+                current_id = None  # missed the name, reset
+PYEOF
+  echo "==> Done: $INTERPRO_NAMES ($(wc -l < "$INTERPRO_NAMES") entries)"
+elif [[ -f "$INTERPRO_NAMES" ]]; then
+  echo "==> interpro_names.tsv already present"
 fi

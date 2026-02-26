@@ -1,0 +1,257 @@
+diff --git a/libnail/src/structs/hmm.rs b/libnail/src/structs/hmm.rs
+index a79a9ef..86b9766 100644
+--- a/libnail/src/structs/hmm.rs
++++ b/libnail/src/structs/hmm.rs
+@@ -237,7 +237,7 @@ struct TokenIndexError;
+ struct FloatRegexError;
+ 
+ /// The alphabet of the sequences represented in a P7HMM.
+-#[derive(Default, Clone)]
++#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+ pub enum Alphabet {
+     Amino,
+     Dna,
+diff --git a/libnail/src/structs/profile.rs b/libnail/src/structs/profile.rs
+index ae23b44..9c37182 100644
+--- a/libnail/src/structs/profile.rs
++++ b/libnail/src/structs/profile.rs
+@@ -29,7 +29,7 @@ impl AsRef<Profile> for Profile {
+     }
+ }
+ 
+-#[derive(Clone, Default)]
++#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
+ pub struct Profile {
+     /// The name of the profile
+     pub name: String,
+diff --git a/nail/Cargo.toml b/nail/Cargo.toml
+index 4d23813..ef79bb3 100644
+--- a/nail/Cargo.toml
++++ b/nail/Cargo.toml
+@@ -19,6 +19,7 @@ jemalloc = ["jemallocator"]
+ 
+ [dependencies]
+ jemallocator = { version = "0.3", optional = true }
++bincode = "1"
+ clap = { version = "4.5.23", features = ["derive", "wrap_help"] }
+ libnail = { path = "../libnail", version = "0.4.0" }
+ anyhow = "1.0.66"
+diff --git a/nail/src/args.rs b/nail/src/args.rs
+index 6a2ec18..991e922 100644
+--- a/nail/src/args.rs
++++ b/nail/src/args.rs
+@@ -6,6 +6,15 @@ use clap::{Args, Parser, Subcommand};
+ pub enum NailSubCommands {
+     #[command(about = "Run nail's protein search pipeline")]
+     Search(SearchArgs),
++    #[command(about = "Pre-serialize an HMM database to a fast-loading binary (.nailbin)")]
++    Prep(PrepArgs),
++}
++
++#[derive(Debug, Args)]
++pub struct PrepArgs {
++    /// The HMM file to binarize (output: <path>.nailbin)
++    #[arg(value_name = "QUERY.hmm")]
++    pub hmm_path: std::path::PathBuf,
+ }
+ 
+ #[derive(Parser)]
+diff --git a/nail/src/main.rs b/nail/src/main.rs
+index 16476ca..b69f3cf 100644
+--- a/nail/src/main.rs
++++ b/nail/src/main.rs
+@@ -2,11 +2,13 @@ mod args;
+ mod io;
+ mod mmseqs;
+ mod pipeline;
++mod prep;
+ mod search;
+ mod stats;
+ mod util;
+ 
+ use args::{NailCli, NailSubCommands};
++use prep::{prep, PrepArgs as LibPrepArgs};
+ use search::search;
+ use util::{check_mmseqs_installed, set_threads};
+ 
+@@ -27,6 +29,11 @@ fn main() -> anyhow::Result<()> {
+             set_threads(args.num_threads)?;
+             search(args)?;
+         }
++        NailSubCommands::Prep(args) => {
++            prep(LibPrepArgs {
++                hmm_path: args.hmm_path,
++            })?;
++        }
+     }
+ 
+     Ok(())
+diff --git a/nail/src/prep.rs b/nail/src/prep.rs
+new file mode 100644
+index 0000000..b9ebd5b
+--- /dev/null
++++ b/nail/src/prep.rs
+@@ -0,0 +1,52 @@
++use std::fs::File;
++use std::io::BufWriter;
++use std::path::PathBuf;
++use std::time::Instant;
++
++use anyhow::Context;
++use libnail::structs::{Hmm, Profile};
++
++pub struct PrepArgs {
++    pub hmm_path: PathBuf,
++}
++
++pub fn prep(args: PrepArgs) -> anyhow::Result<()> {
++    let out_path = args.hmm_path.with_extension(
++        args.hmm_path
++            .extension()
++            .map(|e| format!("{}.nailbin", e.to_string_lossy()))
++            .unwrap_or_else(|| "nailbin".to_string()),
++    );
++
++    println!(
++        "reading {}...",
++        args.hmm_path.file_name().unwrap_or_default().to_string_lossy()
++    );
++    let now = Instant::now();
++    let hmm_file = File::open(&args.hmm_path).context("failed to open HMM file")?;
++    let profiles: Vec<Profile> = Hmm::from_p7hmm(hmm_file)
++        .context("failed to parse HMM file")?
++        .iter()
++        .map(Profile::new)
++        .collect();
++    println!(
++        "  parsed {} profiles in {:.2}s",
++        profiles.len(),
++        now.elapsed().as_secs_f64()
++    );
++
++    println!("writing {}...", out_path.display());
++    let now = Instant::now();
++    let out_file = BufWriter::new(
++        File::create(&out_path).context("failed to create .nailbin file")?,
++    );
++    bincode::serialize_into(out_file, &profiles).context("failed to serialize profiles")?;
++    println!(
++        "  wrote {} profiles in {:.2}s",
++        profiles.len(),
++        now.elapsed().as_secs_f64()
++    );
++    println!("done: {}", out_path.display());
++
++    Ok(())
++}
+diff --git a/nail/src/search.rs b/nail/src/search.rs
+index 83a9f9b..6c79d1b 100644
+--- a/nail/src/search.rs
++++ b/nail/src/search.rs
+@@ -52,6 +52,13 @@ fn read_queries(path: impl AsRef<Path>) -> anyhow::Result<Queries> {
+ 
+             Ok(Queries::Profile(queries))
+         }
++        FileFormat::NailBin => {
++            let file = File::open(&path).context("failed to open .nailbin file")?;
++            let queries: Vec<Profile> =
++                bincode::deserialize_from(std::io::BufReader::new(file))
++                    .context("failed to deserialize .nailbin file")?;
++            Ok(Queries::Profile(queries))
++        }
+         _ => {
+             panic!()
+         }
+diff --git a/nail/src/util.rs b/nail/src/util.rs
+index e41403e..eef6a6c 100644
+--- a/nail/src/util.rs
++++ b/nail/src/util.rs
+@@ -12,6 +12,7 @@ pub enum FileFormat {
+     Fasta,
+     Stockholm,
+     Hmm,
++    NailBin,
+     #[default]
+     Unset,
+ }
+@@ -22,6 +23,7 @@ impl Display for FileFormat {
+             FileFormat::Fasta => write!(f, "Fasta"),
+             FileFormat::Stockholm => write!(f, "Stockholm"),
+             FileFormat::Hmm => write!(f, "HMM"),
++            FileFormat::NailBin => write!(f, "NailBin"),
+             FileFormat::Unset => write!(f, "Unset"),
+         }
+     }
+@@ -36,6 +38,14 @@ pub struct UnrecognizedFileFormatError {
+ pub fn guess_query_format_from_query_file(
+     query_path: &impl AsRef<Path>,
+ ) -> anyhow::Result<FileFormat> {
++    if query_path
++        .as_ref()
++        .extension()
++        .map_or(false, |e| e == "nailbin")
++    {
++        return Ok(FileFormat::NailBin);
++    }
++
+     let file = File::open(query_path).context(format!(
+         "failed to open query file: {}",
+         query_path.as_ref().to_string_lossy()
+diff --git a/nail/src/prep.rs b/nail/src/prep.rs
+new file mode 100644
+index 0000000..b9ebd5b
+--- /dev/null
++++ b/nail/src/prep.rs
+@@ -0,0 +1,52 @@
++use std::fs::File;
++use std::io::BufWriter;
++use std::path::PathBuf;
++use std::time::Instant;
++
++use anyhow::Context;
++use libnail::structs::{Hmm, Profile};
++
++pub struct PrepArgs {
++    pub hmm_path: PathBuf,
++}
++
++pub fn prep(args: PrepArgs) -> anyhow::Result<()> {
++    let out_path = args.hmm_path.with_extension(
++        args.hmm_path
++            .extension()
++            .map(|e| format!("{}.nailbin", e.to_string_lossy()))
++            .unwrap_or_else(|| "nailbin".to_string()),
++    );
++
++    println!(
++        "reading {}...",
++        args.hmm_path.file_name().unwrap_or_default().to_string_lossy()
++    );
++    let now = Instant::now();
++    let hmm_file = File::open(&args.hmm_path).context("failed to open HMM file")?;
++    let profiles: Vec<Profile> = Hmm::from_p7hmm(hmm_file)
++        .context("failed to parse HMM file")?
++        .iter()
++        .map(Profile::new)
++        .collect();
++    println!(
++        "  parsed {} profiles in {:.2}s",
++        profiles.len(),
++        now.elapsed().as_secs_f64()
++    );
++
++    println!("writing {}...", out_path.display());
++    let now = Instant::now();
++    let out_file = BufWriter::new(
++        File::create(&out_path).context("failed to create .nailbin file")?,
++    );
++    bincode::serialize_into(out_file, &profiles).context("failed to serialize profiles")?;
++    println!(
++        "  wrote {} profiles in {:.2}s",
++        profiles.len(),
++        now.elapsed().as_secs_f64()
++    );
++    println!("done: {}", out_path.display());
++
++    Ok(())
++}

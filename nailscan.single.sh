@@ -79,7 +79,9 @@ run_one_hmm() {
   local db_label="$2"
   local out_tsv="$3"
   local work_dir="$4"
-  (cd "$work_dir" && nail search -t "$NAIL_THREADS" --tbl-out results.tbl "$hmm_path" "$INPUT_FASTA")
+  local query_path="$hmm_path"
+  [[ -f "${hmm_path}.nailbin" ]] && query_path="${hmm_path}.nailbin"
+  (cd "$work_dir" && nail search -t "$NAIL_THREADS" --tbl-out results.tbl "$query_path" "$INPUT_FASTA")
   if [[ ! -f "$work_dir/results.tbl" ]]; then
     echo "Error: nail did not produce results.tbl for $db_label"
     return 1
@@ -126,7 +128,8 @@ run_one_hmm() {
   if [[ $IPRLOOKUP -eq 1 ]] || [[ $GOTERMS -eq 1 ]] || \
      [[ "$db_label" == "panther" ]] || [[ "$db_label" == "hamap" ]] || \
      [[ "$db_label" == "superfamily" ]] || [[ "$db_label" == "pfam" ]] || \
-     [[ "$db_label" == "ncbifam" ]]; then
+     [[ "$db_label" == "ncbifam" ]] || [[ "$db_label" == "sfld" ]] || \
+     [[ "$db_label" == "pirsf" ]] || [[ "$db_label" == "cath" ]]; then
     if [[ -n "$db_label" ]] && [[ -f "${SCRIPT_DIR}/scripts/add_ipr_go.py" ]]; then
       local tmp_tsv="${out_tsv}.tmp"
       python3 "${SCRIPT_DIR}/scripts/add_ipr_go.py" --tsv "$out_tsv" --db "$db_label" --data-dir "$DATA_ROOT" \
@@ -152,16 +155,24 @@ if [[ -n "$SINGLE_HMM" ]]; then
   fi
   SINGLE_DB="${SINGLE_DB:-unknown}"
   TEMP_TSV="${WORK}/single.tsv"
+  START_TIME="$(date +%s)"
   echo "Running: $INPUT_FASTA (single HMM, threads: $NAIL_THREADS)"
   echo "Starting $SINGLE_DB ..."
   run_one_hmm "$SINGLE_HMM" "$SINGLE_DB" "$TEMP_TSV" "$WORK"
   FINAL_TSV="${OUTPUT_DIR}/${OUTPUT_FILE_BASE}.tsv"
-  awk -v db="$SINGLE_DB" 'NR==1 { print "Analysis\t" $0; next } { print db "\t" $0 }' "$TEMP_TSV" > "$FINAL_TSV"
-  echo "Done. Results: $FINAL_TSV"
+  awk -v db="$SINGLE_DB" -v lmap="pfam=Pfam,cath=Gene3D,superfamily=SUPERFAMILY,panther=PANTHER,ncbifam=NCBIfam,hamap=Hamap,sfld=SFLD,pirsf=PIRSF,pirsr=PIRSR,antifam=AntiFam" '
+    BEGIN { n=split(lmap,p,","); for(i=1;i<=n;i++){split(p[i],kv,"=");m[kv[1]]=kv[2]}; label=(db in m)?m[db]:db }
+    NR==1 { rest=substr($0,index($0,"\t")); print $1 "\tAnalysis" rest; next }
+    { rest=substr($0,index($0,"\t")); print $1 "\t" label rest }
+  ' "$TEMP_TSV" > "$FINAL_TSV"
+  END_TIME="$(date +%s)"
+  M=$(((END_TIME - START_TIME) / 60))
+  echo "completed in ${M} minutes."
+  echo "$FINAL_TSV"
   exit 0
 fi
 
-# All-DBs mode: get DB list from config
+# All-DBs mode: get DB list from config (skips entries with "enabled": false)
 if [[ ! -f "$CONFIG_JSON" ]]; then
   echo "Error: config.json not found; cannot run all databases."
   exit 1
@@ -174,10 +185,20 @@ else
 import json, sys
 with open(sys.argv[1]) as f:
     c = json.load(f)
-print(" ".join(k for k in c if isinstance(c.get(k), dict)))
+print(" ".join(k for k in c if isinstance(c.get(k), dict) and c[k].get("enabled", True)))
 ' "$CONFIG_JSON" 2>/dev/null)"
 fi
 
+# Awk snippet: reorder columns (target first, Analysis second) and apply canonical DB label
+_merge_awk() {
+  local db="$1"
+  awk -v db="$db" -v lmap="pfam=Pfam,cath=Gene3D,superfamily=SUPERFAMILY,panther=PANTHER,ncbifam=NCBIfam,hamap=Hamap,sfld=SFLD,pirsf=PIRSF,pirsr=PIRSR,antifam=AntiFam" '
+    BEGIN { n=split(lmap,p,","); for(i=1;i<=n;i++){split(p[i],kv,"=");m[kv[1]]=kv[2]}; label=(db in m)?m[db]:db }
+    { rest=substr($0,index($0,"\t")); print $1 "\t" label rest }
+  '
+}
+
+START_TIME="$(date +%s)"
 echo "Running: $INPUT_FASTA (threads: $NAIL_THREADS) for: $DB_LIST"
 first=1
 for db in $DB_LIST; do
@@ -201,17 +222,22 @@ print(v.get("hmm_name", "") if isinstance(v, dict) else "")
   run_one_hmm "$HMM_PATH" "$db" "$TEMP_TSV" "$WORK_DB"
   if [[ ! -f "$TEMP_TSV" ]]; then continue; fi
   if [[ $first -eq 1 ]]; then
-    awk -v db="$db" 'NR==1 { print "Analysis\t" $0; next } { print db "\t" $0 }' "$TEMP_TSV" > "${WORK}/merged.tsv"
+    # Write header (target first, then Analysis)
+    head -1 "$TEMP_TSV" | awk -v lmap="pfam=Pfam" 'BEGIN{} { rest=substr($0,index($0,"\t")); print $1 "\tAnalysis" rest }' > "${WORK}/merged.tsv"
     first=0
-  else
-    awk -v db="$db" 'NR>1 { print db "\t" $0 }' "$TEMP_TSV" >> "${WORK}/merged.tsv"
   fi
+  tail -n +2 "$TEMP_TSV" | _merge_awk "$db" >> "${WORK}/merged.tsv"
 done
 FINAL_TSV="${OUTPUT_DIR}/${OUTPUT_FILE_BASE}.tsv"
 if [[ -f "${WORK}/merged.tsv" ]]; then
-  # Sort by gene ID (column 2 = target), keeping header on top
-  { head -1 "${WORK}/merged.tsv"; tail -n +2 "${WORK}/merged.tsv" | sort -t$'\t' -k2,2; } > "$FINAL_TSV"
-  echo "Done. Results: $FINAL_TSV"
+  # Sort by gene ID (column 1 = target), keeping header on top
+  { head -1 "${WORK}/merged.tsv"; tail -n +2 "${WORK}/merged.tsv" | sort -t$'\t' -k1,1; } > "$FINAL_TSV"
+  END_TIME="$(date +%s)"
+  M=$(((END_TIME - START_TIME) / 60))
+  echo "completed in ${M} minutes."
+  echo "$FINAL_TSV"
 else
-  echo "Done. No results produced."
+  END_TIME="$(date +%s)"
+  M=$(((END_TIME - START_TIME) / 60))
+  echo "completed in ${M} minutes. No results produced."
 fi
