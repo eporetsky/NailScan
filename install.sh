@@ -34,7 +34,8 @@ echo "==> Cloning nail (version: ${NAIL_VERSION}) into ${NAIL_DIR} ..."
 if [[ -d "$NAIL_DIR" ]]; then
   (cd "$NAIL_DIR" && git fetch --all && git checkout "$NAIL_VERSION" && git pull --ff-only 2>/dev/null || true)
 else
-  git clone --depth 1 --branch "$NAIL_VERSION" "$NAIL_REPO_URL" "$NAIL_DIR"
+  git clone "$NAIL_REPO_URL" "$NAIL_DIR"
+  (cd "$NAIL_DIR" && git checkout "$NAIL_VERSION")
 fi
 
 PATCH_FILE="${SCRIPT_DIR}/patches/nail-binarize.patch"
